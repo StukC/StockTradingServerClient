@@ -1,19 +1,33 @@
 import socket
+import threading
+from select import select
 
-HOST = 'localhost'
-PORT = 8942
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
+def receive(server):
     while True:
-        # Prompt user for input
-        user_input = input('Enter command: ')
+        readable, _, _ = select([server], [], [], 1)
+        if not readable:
+            continue
 
-        # Send input to server
-        s.sendall(user_input.encode())
+        msg = server.recv(1024).decode("utf-8")
+        if msg:
+            print(msg)
 
-        # Receive response from server
-        data = s.recv(1024).decode()
+def main():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.connect((SERVER, PORT))
 
-        # Print response
-        print('Received:', data.strip())
+    receive_thread = threading.Thread(target=receive, args=(server,))
+    receive_thread.start()
+
+    while True:
+        command = input("Enter command: ")
+        server.send(command.encode("utf-8"))
+        if command.lower() == "quit":
+            break
+
+    server.close()
+
+if __name__ == "__main__":
+    SERVER = "127.0.0.1"
+    PORT = 5050
+    main()
