@@ -2,12 +2,15 @@ import socket
 import sqlite3
 import sys
 import threading
+import select
 
 HOST = '127.0.0.1'
 PORT = 8283
+MAX_CONCURRENT_CONNECTIONS = 10
+logged_in_users = set()
 
-def init_database():
-    conn = sqlite3.connect('example.db')
+def init_database(database_name):
+    conn = sqlite3.connect(database_name)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS Users
                  (ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,30 +33,37 @@ def init_database():
     user_count = c.fetchone()[0]
 
     if user_count == 0:
-        # Create a sample user if there are no users
-        c.execute("INSERT INTO Users (first_name, last_name, user_name, password, email, usd_balance) VALUES (?, ?, ?, ?, ?, ?)",
-                  ('John', 'Doe', 'jdoe', 'password123', 'john.doe@example.com', 5000.00))
-        conn.commit()
+        # Create sample users
+        sample_users = [
+            ('John', 'Doe', 'jdoe', 'password123', 'john.doe@example.com', 5000.00),
+            ('Jane', 'Smith', 'jsmith', 'password456', 'jane.smith@example.com', 4000.00),
+            ('Alice', 'Johnson', 'ajohnson', 'password789', 'alice.johnson@example.com', 6000.00),
+            ('Bob', 'Williams', 'bwilliams', 'password012', 'bob.williams@example.com', 3000.00)
+        ]
 
-    # Check if there are any stock records
-    c.execute("SELECT COUNT(*) FROM Stocks")
-    stock_count = c.fetchone()[0]
-
-    if stock_count == 0:
-        # Get the user ID for the sample user
-        c.execute("SELECT ID FROM Users WHERE user_name=?", ('jdoe',))
-        user_id = c.fetchone()[0]
-
-        # Insert sample data into Stocks table
-        c.execute("INSERT INTO Stocks (stock_symbol, stock_name, stock_balance, user_id) VALUES (?, ?, ?, ?)",
-                  ('AAPL', 'Apple Inc.', 100, user_id))
-        c.execute("INSERT INTO Stocks (stock_symbol, stock_name, stock_balance, user_id) VALUES (?, ?, ?, ?)",
-                  ('MSFT', 'Microsoft Corporation', 50, user_id))
-        c.execute("INSERT INTO Stocks (stock_symbol, stock_name, stock_balance, user_id) VALUES (?, ?, ?, ?)",
-                  ('GOOG', 'Alphabet Inc.', 200, user_id))
+        c.executemany("INSERT INTO Users (first_name, last_name, user_name, password, email, usd_balance) VALUES (?, ?, ?, ?, ?, ?)", sample_users)
         conn.commit()
 
     return conn
+
+def handle_login(c, username, password, session_data):
+    if 'user_id' in session_data:
+        return "Already logged in"
+
+    c.execute("SELECT ID FROM Users WHERE user_name=? AND password=?", (username, password))
+    user_data = c.fetchone()
+
+    if user_data is None:
+        return "403 Wrong UserID or Password"
+
+    user_id = user_data[0]
+    if user_id in logged_in_users:
+        return "User is already logged in"
+
+    session_data['user_id'] = user_id
+    logged_in_users.add(user_id)
+
+    return f"200 OK\nLogged in as {username}"
 
 def handle_buy(c, stock_symbol, stock_amount, price_per_stock, user_id):
     # Check if user exists
@@ -147,11 +157,12 @@ def handle_list(c):
 
     return f"200 OK\nThe list of records in the Stocks database:\n{stock_records}"
 
-def client_handler(client_socket, client_address):
+def client_handler(client_socket, client_address, database_name):
+    conn = sqlite3.connect(database_name)
+    c = conn.cursor()
     print('Connected by', client_address)
 
-    # Create a new connection and cursor for each thread
-    conn = init_database()
+    session_data = {}
     c = conn.cursor()
 
     while True:
@@ -162,7 +173,11 @@ def client_handler(client_socket, client_address):
         print(f"Received command: {command} from {client_address}")
 
         try:
-            if command == 'BUY':
+            if command == 'LOGIN':
+                username, password = data.split()[1:]
+                result = handle_login(c, username, password, session_data)
+                client_socket.sendall(result.encode())
+            elif command == 'BUY':
                 stock_symbol, stock_amount, price, user_id = data.split()[1:]
                 result = handle_buy(c, stock_symbol, float(stock_amount), float(price), int(user_id))
                 client_socket.sendall(result.encode())
@@ -174,14 +189,12 @@ def client_handler(client_socket, client_address):
                 data_parts = data.split()
                 if len(data_parts) != 2:
                     raise ValueError("Invalid arguments for BALANCE command")
-
                 user_id = data_parts[1]
                 result = handle_balance(c, int(user_id))
                 client_socket.sendall(result.encode())
             elif command == 'LIST':
                 if len(data.split()) != 1:
                     raise ValueError("Invalid arguments for LIST command")
-
                 result = handle_list(c)
                 client_socket.sendall(result.encode())
             elif command == 'SHUTDOWN':
@@ -196,7 +209,6 @@ def client_handler(client_socket, client_address):
             client_socket.sendall(str(e).encode())
 
     # Close the connection for this thread
-    conn.close()
     print('Connection closed by', client_address)
     client_socket.close()
 
@@ -206,10 +218,28 @@ def main():
         s.listen()
         print(f'Server listening on {HOST}:{PORT}...')
 
+        database_name = 'example.db'
+        init_database(database_name)
+        connections = []
+
         while True:
-            client_socket, client_address = s.accept()
-            client_thread = threading.Thread(target=client_handler, args=(client_socket, client_address))
-            client_thread.start()
+            readable_sockets, _, _ = select.select([s] + connections, [], [], 1)
+
+            for sock in readable_sockets:
+                if sock is s:
+                    if len(connections) < MAX_CONCURRENT_CONNECTIONS:
+                        client_socket, client_address = s.accept()
+                        connections.append(client_socket)
+                        client_thread = threading.Thread(target=client_handler, args=(client_socket, client_address, database_name))
+                        client_thread.start()
+                    else:
+                        print("Maximum concurrent connections reached")
+                else:
+                    data = sock.recv(1024).decode().strip()
+                    if not data:
+                        connections.remove(sock)
+                        sock.close()
+                        print("Connection closed")
 
     print("Server shutdown.")
 
