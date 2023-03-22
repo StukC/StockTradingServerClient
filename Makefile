@@ -1,16 +1,7 @@
-# Makefile
-
-# Variables
-PYTHON = python3
-SERVER_FILE = server.py
-CLIENT_FILE = client.py
-
-# Targets
-.PHONY: all
-all: server client
+.PHONY: server client
 
 server:
-	$(PYTHON) $(SERVER_FILE)
+	@python3 server.py
 
 client:
-	$(PYTHON) $(CLIENT_FILE)
+	@python3 client.py

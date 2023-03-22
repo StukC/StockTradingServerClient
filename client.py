@@ -1,33 +1,27 @@
 import socket
-import threading
-from select import select
 
-def receive(server):
-    while True:
-        readable, _, _ = select([server], [], [], 1)
-        if not readable:
-            continue
-
-        msg = server.recv(1024).decode("utf-8")
-        if msg:
-            print(msg)
+HOST = 'localhost'
+PORT = 8283
 
 def main():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.connect((SERVER, PORT))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        while True:
+            # Prompt user for input
+            user_input = input('Enter command: ')
 
-    receive_thread = threading.Thread(target=receive, args=(server,))
-    receive_thread.start()
+            # Send input to server
+            s.sendall(user_input.encode())
 
-    while True:
-        command = input("Enter command: ")
-        server.send(command.encode("utf-8"))
-        if command.lower() == "quit":
-            break
+            # Receive response from server
+            data = s.recv(1024).decode()
 
-    server.close()
+            # Print response
+            print('Received:', data.strip())
 
-if __name__ == "__main__":
-    SERVER = "127.0.0.1"
-    PORT = 5050
+            # If the server sends a "200 OK" response after a QUIT command, close the client
+            if user_input.strip().upper() == "QUIT" and data.strip() == "200 OK":
+                break
+
+if __name__ == '__main__':
     main()

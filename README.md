@@ -1,31 +1,29 @@
-Client-Server Stock Trading Program
+# Stock Trading Server and Client
 
-This is a simple client-server program written in Python. The server listens for connections from clients and the client sends commands to the server and receives responses.
+This project consists of a simple stock trading server and client application. The server manages a SQLite database containing user and stock information, and the client allows users to send commands to buy, sell, check their balance, or list all stock records in the database.
 
-Requirements
+## Requirements
 
-    Python 3.x
+- Python 3.6 or later
+- sqlite3 (included in Python's standard library)
 
-Usage
-    Make
-    Start the server by running python server.py.
-    Start the client by running python client.py.
-    Enter a command at the prompt in the client terminal.
-    The server will receive the command, process it, and send a response back to the client.
-    The client will print the response in its terminal.
+## Running the server and client
 
-Files
+1. Open two terminal windows.
+2. In the first terminal, navigate to the directory containing the `server.py` file.
+3. Run the server using the following command: `python server.py` or `python3 server.py`, depending on your system's configuration.
+4. In the second terminal, navigate to the directory containing the `client.py` file.
+5. Run the client using the following command: `python client.py` or `python3 client.py`, depending on your system's configuration.
 
-    server.py: The Python script for the server.
-    client.py: The Python script for the client.
-    Makefile: The makefile for compiling the program.
+## Commands
 
-Commands:
-BUY
-SELL
-LIST
-BALANCE
-SHUTDOWN
-QUIT
+The client accepts the following commands:
 
-Everything by Chase 
+- `BUY <stock_symbol> <stock_amount> <price_per_stock> <user_id>`: Buy stocks for a user.
+- `SELL <stock_symbol> <stock_amount> <price_per_stock> <user_id>`: Sell stocks for a user.
+- `BALANCE <user_id>`: Check the USD balance of a user.
+- `LIST`: List all stock records in the database.
+- `QUIT`: Disconnect the client from the server.
+- `SHUTDOWN`: Shut down the server (only use this command when you want to stop the server).
+
+Please note that input validation is minimal, and the server does not provide real-time stock prices. This project is intended for educational purposes only and should not be used for actual stock trading.
