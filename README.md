@@ -10,10 +10,10 @@ This project consists of a simple stock trading server and client application. T
 ## Running the server and client
 
 1. Open two terminal windows.
+4. In the first terminal, navigate to the project directory
+3. Run the server using the following command: `python3 server.py` or `python server.py`, depending on your system's configuration.
 4. In the second terminal, navigate to the project directory
-3. Run the server using the following command: `python3 server.py` or `python3 server.py`, depending on your system's configuration.
-4. In the second terminal, navigate to the project directory
-5. Run the client using the following command: `python3 client.py` or `python3 client.py`, depending on your system's configuration.
+5. Run the client using the following command: `python3 client.py` or `python client.py`, depending on your system's configuration.
 
 ## Commands
 
