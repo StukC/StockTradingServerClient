@@ -26,4 +26,4 @@ The client accepts the following commands:
 - `QUIT`: Disconnect the client from the server.
 - `SHUTDOWN`: Shut down the server (only use this command when you want to stop the server).
 
-Please note that input validation is minimal, and the server does not provide real-time stock prices. This project is intended for educational purposes only and should not be used for actual stock trading.
+Please note that input validation is minimal, and the server does not provide real-time stock prices.
