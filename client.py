@@ -17,7 +17,7 @@ def main():
             data = s.recv(1024).decode()
 
             # Print response
-            print('Received: 200', data.strip())
+            print('Received: ', data.strip())
 
             # If the server sends a "200 OK" response after a QUIT or LOGOUT command, close the client
             if user_input.strip().upper() == "QUIT" and data.strip() == "200 OK":

@@ -44,6 +44,19 @@ def init_database(database_name):
         c.executemany("INSERT INTO Users (first_name, last_name, user_name, password, email, usd_balance) VALUES (?, ?, ?, ?, ?, ?)", sample_users)
         conn.commit()
 
+        # Create sample stocks
+        sample_stocks = [
+            ('AAPL', 'Apple Inc.', 100.0, 1),
+            ('MSFT', 'Microsoft Corporation', 50.0, 1),
+            ('GOOG', 'Alphabet Inc.', 200.0, 1),
+            ('AAPL', 'Apple Inc.', 150.0, 2),
+            ('GOOG', 'Alphabet Inc.', 50.0, 3),
+            ('MSFT', 'Microsoft Corporation', 25.0, 4),
+        ]
+
+        c.executemany("INSERT INTO Stocks (stock_symbol, stock_name, stock_balance, user_id) VALUES (?, ?, ?, ?)", sample_stocks)
+        conn.commit()
+
     return conn
 
 def handle_login(c, username, password, session_data):
@@ -144,18 +157,31 @@ def handle_balance(c, user_id):
 
     return f"200 OK\nBalance for user {first_name} {last_name}: ${usd_balance:.2f}"
 
-def handle_list(c):
-    # Retrieve all stock records
-    c.execute("SELECT ID, stock_symbol, stock_name, stock_balance, user_id FROM Stocks")
+def handle_list(c, user_id):
+    # Check if the user is a root user
+    c.execute("SELECT user_name FROM Users WHERE ID=?", (user_id,))
+    user_name = c.fetchone()[0]
+    is_root_user = user_name.lower() == 'root'
+
+    if is_root_user:
+        # Retrieve all stock records for all users
+        c.execute("SELECT Stocks.ID, stock_symbol, stock_name, stock_balance, Users.user_name FROM Stocks INNER JOIN Users ON Stocks.user_id = Users.ID")
+    else:
+        # Retrieve stock records only for the logged-in user
+        c.execute("SELECT ID, stock_symbol, stock_name, stock_balance FROM Stocks WHERE user_id=?", (user_id,))
+    
     stocks = c.fetchall()
 
     if not stocks:
         return "No stock records found in the Stocks database."
 
     # Format the stock records for output
-    stock_records = "\n".join([f"{stock_id} {stock_symbol} {stock_name} {stock_balance} {user_id}" for stock_id, stock_symbol, stock_name, stock_balance, user_id in stocks])
+    if is_root_user:
+        stock_records = "\n".join([f"{stock_id} {stock_symbol} {stock_name} {stock_balance} {user}" for stock_id, stock_symbol, stock_name, stock_balance, user in stocks])
+    else:
+        stock_records = "\n".join([f"{stock_id} {stock_symbol} {stock_name} {stock_balance}" for stock_id, stock_symbol, stock_name, stock_balance in stocks])
 
-    return f"200 OK\nThe list of records in the Stocks database:\n{stock_records}"
+    return f"200 OK\nThe list of records in the Stocks database{' for ' + user_name if not is_root_user else ''}:\n{stock_records}"
 
 def handle_logout(c, username, session_data):
     if 'user_id' not in session_data:
@@ -216,7 +242,10 @@ def client_handler(client_socket, client_address, database_name):
             elif command == 'LIST':
                 if len(data.split()) != 1:
                     raise ValueError("Invalid arguments for LIST command")
-                result = handle_list(c)
+                if 'user_id' not in session_data:
+                    result = "You must be logged in to use the LIST command"
+                else:
+                    result = handle_list(c, session_data['user_id'])
                 client_socket.sendall(result.encode())
             elif command == 'LOGOUT':
                 data_parts = data.split()
