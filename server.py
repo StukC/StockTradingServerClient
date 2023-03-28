@@ -8,6 +8,7 @@ HOST = '127.0.0.1'
 PORT = 8283
 MAX_CONCURRENT_CONNECTIONS = 10
 logged_in_users = set()
+active_users_ips = {}
 
 def init_database(database_name):
     conn = sqlite3.connect(database_name)
@@ -59,7 +60,7 @@ def init_database(database_name):
 
     return conn
 
-def handle_login(c, username, password, session_data):
+def handle_login(c, username, password, session_data, client_address):
     if 'user_id' in session_data:
         return "Already logged in"
 
@@ -75,6 +76,7 @@ def handle_login(c, username, password, session_data):
 
     session_data['user_id'] = user_id
     logged_in_users.add(user_id)
+    active_users_ips[user_id] = client_address[0]
 
     return f"200 OK\nLogged in as {username}"
 
@@ -183,6 +185,17 @@ def handle_list(c, user_id):
 
     return f"200 OK\nThe list of records in the Stocks database{' for ' + user_name if not is_root_user else ''}:\n{stock_records}"
 
+def handle_who(c):
+    if not active_users_ips:
+        return "No active users"
+
+    c.execute("SELECT ID, user_name FROM Users WHERE ID IN ({})".format(', '.join('?' * len(active_users_ips))), tuple(active_users_ips.keys()))
+    active_users_data = c.fetchall()
+
+    active_users_info = "\n".join([f"{user_name} {active_users_ips[user_id]}" for user_id, user_name in active_users_data])
+
+    return f"200 OK\nThe list of the active users:\n{active_users_info}"
+
 def handle_logout(c, username, session_data):
     if 'user_id' not in session_data:
         return "Not logged in"
@@ -222,7 +235,7 @@ def client_handler(client_socket, client_address, database_name):
         try:
             if command == 'LOGIN':
                 username, password = data.split()[1:]
-                result = handle_login(c, username, password, session_data)
+                result = handle_login(c, username, password, session_data, client_address)
                 client_socket.sendall(result.encode())
             elif command == 'BUY':
                 stock_symbol, stock_amount, price, user_id = data.split()[1:]
@@ -246,6 +259,12 @@ def client_handler(client_socket, client_address, database_name):
                     result = "You must be logged in to use the LIST command"
                 else:
                     result = handle_list(c, session_data['user_id'])
+                client_socket.sendall(result.encode())
+            elif command == 'WHO':
+                if 'user_id' in session_data and session_data['user_id'] == 2:  # Check if the user is the root user (ID 2)
+                    result = handle_who(c)
+                else:
+                    result = "403 Forbidden: WHO command is only allowed for the root user"
                 client_socket.sendall(result.encode())
             elif command == 'LOGOUT':
                 data_parts = data.split()
