@@ -17,10 +17,12 @@ def main():
             data = s.recv(1024).decode()
 
             # Print response
-            print('Received:', data.strip())
+            print('Received: 200', data.strip())
 
-            # If the server sends a "200 OK" response after a QUIT command, close the client
+            # If the server sends a "200 OK" response after a QUIT or LOGOUT command, close the client
             if user_input.strip().upper() == "QUIT" and data.strip() == "200 OK":
+                break
+            if user_input.strip().upper() == "LOGOUT" and data.strip() == "200 OK":
                 break
 
 if __name__ == '__main__':
