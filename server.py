@@ -35,10 +35,10 @@ def init_database(database_name):
     if user_count == 0:
         # Create sample users
         sample_users = [
-            ('John', 'Doe', 'jdoe', 'password123', 'john.doe@example.com', 5000.00),
-            ('Jane', 'Smith', 'jsmith', 'password456', 'jane.smith@example.com', 4000.00),
-            ('Alice', 'Johnson', 'ajohnson', 'password789', 'alice.johnson@example.com', 6000.00),
-            ('Bob', 'Williams', 'bwilliams', 'password012', 'bob.williams@example.com', 3000.00)
+            ('John', 'Doe', 'John', 'John01', 'john.doe@example.com', 5000.00),
+            ('Root', 'User', 'Root', 'Root01', 'Root@example.com', 0.00),
+            ('Mary', 'Smith', 'Mary', 'Mary01', 'mary.smith@example.com', 6000.00),
+            ('Moe', 'Doe', 'Moe', 'Moe01', 'moe.doe@example.com', 3000.00)
         ]
 
         c.executemany("INSERT INTO Users (first_name, last_name, user_name, password, email, usd_balance) VALUES (?, ?, ?, ?, ?, ?)", sample_users)
@@ -157,6 +157,25 @@ def handle_list(c):
 
     return f"200 OK\nThe list of records in the Stocks database:\n{stock_records}"
 
+def handle_logout(c, username, session_data):
+    if 'user_id' not in session_data:
+        return "Not logged in"
+
+    c.execute("SELECT ID FROM Users WHERE user_name=?", (username,))
+    user_data = c.fetchone()
+
+    if user_data is None:
+        return "User not found"
+
+    user_id = user_data[0]
+    if user_id != session_data['user_id']:
+        return "User mismatch"
+
+    logged_in_users.remove(user_id)
+    del session_data['user_id']
+
+    return "200 OK\nLogged out"
+
 def client_handler(client_socket, client_address, database_name):
     conn = sqlite3.connect(database_name)
     c = conn.cursor()
@@ -164,6 +183,8 @@ def client_handler(client_socket, client_address, database_name):
 
     session_data = {}
     c = conn.cursor()
+
+    logged_out = False
 
     while True:
         data = client_socket.recv(1024).decode().strip()
@@ -197,6 +218,15 @@ def client_handler(client_socket, client_address, database_name):
                     raise ValueError("Invalid arguments for LIST command")
                 result = handle_list(c)
                 client_socket.sendall(result.encode())
+            elif command == 'LOGOUT':
+                data_parts = data.split()
+                if len(data_parts) != 2:
+                    raise ValueError("Invalid arguments for LOGOUT command")
+                username = data_parts[1]
+                result = handle_logout(c, username, session_data)
+                client_socket.sendall(result.encode())
+                logged_out = True
+                break
             elif command == 'SHUTDOWN':
                 client_socket.sendall(b'200 OK\n')
                 break
@@ -208,12 +238,19 @@ def client_handler(client_socket, client_address, database_name):
         except ValueError as e:
             client_socket.sendall(str(e).encode())
 
+        # Add this block after the exception handling
+        if command == 'LOGOUT' or command == 'QUIT':
+            if 'user_id' in session_data:
+                logged_in_users.remove(session_data['user_id'])
+            break
+
     # Close the connection for this thread
     print('Connection closed by', client_address)
     client_socket.close()
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen()
         print(f'Server listening on {HOST}:{PORT}...')
@@ -235,13 +272,13 @@ def main():
                     else:
                         print("Maximum concurrent connections reached")
                 else:
-                    data = sock.recv(1024).decode().strip()
-                    if not data:
-                        connections.remove(sock)
-                        sock.close()
-                        print("Connection closed")
+                    pass
 
-    print("Server shutdown.")
+            # Remove closed connections from the connections list
+            connections = [conn for conn in connections if not conn._closed]
+
+            # Print the number of active connections
+            print(f"{len(connections)} active connections")
 
 if __name__ == '__main__':
     main()
