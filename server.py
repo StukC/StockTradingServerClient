@@ -196,6 +196,18 @@ def handle_who(c):
 
     return f"200 OK\nThe list of the active users:\n{active_users_info}"
 
+def handle_lookup(c, stock_symbol, user_id):
+    # Check if the stock exists
+    c.execute("SELECT * FROM Stocks WHERE stock_symbol=?", (stock_symbol,))
+    stock_data = c.fetchone()
+
+    if stock_data is None:
+        return "Stock not found"
+
+    stock_id, stock_symbol, stock_name, stock_value, stock_change = stock_data
+
+    return f"200 OK\nID: {stock_id}\nSymbol: {stock_symbol}\nName: {stock_name}\nValue: {stock_value}\nChange: {stock_change}"
+
 def handle_logout(c, username, session_data):
     if 'user_id' not in session_data:
         return "Not logged in"
@@ -214,6 +226,25 @@ def handle_logout(c, username, session_data):
     del session_data['user_id']
 
     return "200 OK\nLogged out"
+
+def handle_deposit(c, user_id, deposit_amount):
+    # Check if user exists
+    c.execute("SELECT usd_balance FROM Users WHERE ID=?", (user_id,))
+    user_balance_data = c.fetchone()
+
+    if user_balance_data is None:
+        return "User doesn't exist"
+
+    user_balance = user_balance_data[0]
+    new_usd_balance = user_balance + float(deposit_amount)
+
+    # Update user balance
+    c.execute("UPDATE Users SET usd_balance=? WHERE ID=?", (new_usd_balance, user_id))
+
+    # Commit the changes
+    c.connection.commit()
+
+    return f"Deposit successfully. New balance ${new_usd_balance:.2f}"
 
 def client_handler(client_socket, client_address, database_name):
     conn = sqlite3.connect(database_name)
@@ -265,6 +296,20 @@ def client_handler(client_socket, client_address, database_name):
                     result = handle_who(c)
                 else:
                     result = "403 Forbidden: WHO command is only allowed for the root user"
+                client_socket.sendall(result.encode())
+            elif command == 'LOOKUP':
+                if 'user_id' not in session_data:
+                    result = "You must be logged in to use the LOOKUP command"
+                else:
+                    stock_symbol = data.split()[1]
+                    result = handle_lookup(c, stock_symbol, session_data['user_id'])
+                client_socket.sendall(result.encode())
+            elif command == 'DEPOSIT':
+                if 'user_id' not in session_data:
+                    result = "You must be logged in to use the DEPOSIT command"
+                else:
+                    deposit_amount = data.split()[1]
+                    result = handle_deposit(c, session_data['user_id'], deposit_amount)
                 client_socket.sendall(result.encode())
             elif command == 'LOGOUT':
                 data_parts = data.split()
