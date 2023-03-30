@@ -23,6 +23,9 @@ The client accepts the following commands:
 - `SELL <stock_symbol> <stock_amount> <price_per_stock> <user_id>`: Sell stocks for a user.
 - `BALANCE <user_id>`: Check the USD balance of a user.
 - `LIST`: List all stock records in the database.
+- `WHO`: (Root user only) View the list of active users on the server.
+- `LOOKUP <stock_symbol>`: Look up stock information for the specified stock symbol.
+- `DEPOSIT <deposit_amount>`: Deposit the specified amount into the user's account.
 - `QUIT`: Disconnect the client from the server.
 - `SHUTDOWN`: Shut down the server (only use this command when you want to stop the server).
 
